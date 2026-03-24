@@ -271,6 +271,61 @@ async def get_strategy_html(request: Request, run_id: str, name: str):
     )
 
 
+# ============ SCANNER ENDPOINTS ============
+
+from .scanner import (
+    deploy_strategy, undeploy_strategy, load_deployed_strategies,
+    run_scanner, run_scanner_with_alerts
+)
+
+
+@app.post("/strategy/{run_id}/{name}/deploy")
+async def deploy_strategy_endpoint(run_id: str, name: str):
+    """Deploy a strategy for daily signal scanning."""
+    code_path = ARTIFACTS_DIR / run_id / "strategies" / f"{name}.py"
+    
+    if not code_path.exists():
+        return {"error": "Strategy not found"}
+    
+    success = deploy_strategy(run_id, name)
+    
+    if success:
+        return {"status": "deployed", "message": f"Strategy {name} deployed for daily alerts"}
+    else:
+        return {"status": "already_deployed", "message": f"Strategy {name} was already deployed"}
+
+
+@app.delete("/strategy/{run_id}/{name}/deploy")
+async def undeploy_strategy_endpoint(run_id: str, name: str):
+    """Remove a strategy from daily scanning."""
+    success = undeploy_strategy(run_id, name)
+    
+    if success:
+        return {"status": "undeployed", "message": f"Strategy {name} removed from alerts"}
+    else:
+        return {"status": "not_found", "message": f"Strategy {name} was not deployed"}
+
+
+@app.get("/deployed")
+async def get_deployed_strategies():
+    """List all deployed strategies."""
+    return {"strategies": load_deployed_strategies()}
+
+
+@app.post("/scan")
+async def run_scan():
+    """Run all deployed strategies and return signals (no alerts)."""
+    results = run_scanner()
+    return {"results": results}
+
+
+@app.post("/scan/alerts")
+async def run_scan_with_alerts():
+    """Run all deployed strategies and send Telegram alerts."""
+    results = await run_scanner_with_alerts()
+    return results
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
