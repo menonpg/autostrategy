@@ -35,6 +35,7 @@ class AutoStrategyLoop:
         
         # State
         self.leaderboard = []
+        self.all_strategies = []  # Track ALL strategies, not just winners
         self.iteration = 0
         self.start_time = None
         
@@ -106,6 +107,19 @@ class AutoStrategyLoop:
             decision = self._decide(metrics, analysis, keep_threshold)
             print(f"[{self._elapsed()}] Decision: {decision}")
             
+            # Save ALL strategies with metrics (not just winners)
+            self.all_strategies.append({
+                "name": strategy_name,
+                "sharpe": metrics["sharpe"],
+                "total_return": metrics["total_return"],
+                "max_drawdown": metrics["max_drawdown"],
+                "trades": metrics["trade_count"],
+                "win_rate": metrics.get("win_rate", 0),
+                "iteration": self.iteration,
+                "decision": decision,
+                "hypothesis": hypothesis[:200]
+            })
+            
             if decision == "KEEP":
                 # Add to leaderboard
                 self.leaderboard.append({
@@ -171,9 +185,15 @@ class AutoStrategyLoop:
         return f"{elapsed // 60:02d}:{elapsed % 60:02d}"
     
     def _save_results(self):
-        """Save leaderboard and lessons."""
+        """Save leaderboard, all strategies, and lessons."""
+        # Save winners (leaderboard)
         leaderboard_path = self.artifacts_dir / "leaderboard.json"
         leaderboard_path.write_text(json.dumps(self.leaderboard, indent=2))
+        
+        # Save ALL strategies with metrics
+        all_strategies_path = self.artifacts_dir / "all_strategies.json"
+        all_strategies_path.write_text(json.dumps(self.all_strategies, indent=2))
+        
         print(f"\n[{self._elapsed()}] Results saved to {self.artifacts_dir}")
     
     def _print_leaderboard(self):

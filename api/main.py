@@ -46,7 +46,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 def load_all_strategies() -> list:
-    """Load ALL strategies from artifacts directories (not just winners)."""
+    """Load ALL strategies from artifacts directories with full metrics."""
     strategies = []
     if not ARTIFACTS_DIR.exists():
         return strategies
@@ -55,7 +55,21 @@ def load_all_strategies() -> list:
         if not run_dir.is_dir() or run_dir.name.startswith('.'):
             continue
         
-        # Load from leaderboard.json (winners)
+        # Prefer all_strategies.json (has all metrics)
+        all_strategies_file = run_dir / "all_strategies.json"
+        if all_strategies_file.exists():
+            try:
+                data = json.loads(all_strategies_file.read_text())
+                for s in data:
+                    s['run_id'] = run_dir.name
+                    s['status'] = s.get('decision', 'UNKNOWN')
+                    s['code_path'] = str(run_dir / "strategies" / f"{s['name']}.py")
+                    strategies.append(s)
+                continue  # Skip other loading if we have all_strategies.json
+            except:
+                pass
+        
+        # Fallback: load from leaderboard.json + strategy files
         leaderboard_file = run_dir / "leaderboard.json"
         winners = set()
         if leaderboard_file.exists():
@@ -70,13 +84,12 @@ def load_all_strategies() -> list:
             except:
                 pass
         
-        # Also load ALL strategy files (including discarded ones)
+        # Also load strategy files without metrics
         strategies_dir = run_dir / "strategies"
         if strategies_dir.exists():
             for strategy_file in strategies_dir.glob("*.py"):
                 name = strategy_file.stem
                 if name not in winners:
-                    # Parse the file to extract any metrics from comments/docstring
                     strategies.append({
                         'name': name,
                         'run_id': run_dir.name,
@@ -87,18 +100,6 @@ def load_all_strategies() -> list:
                         'trades': 0,
                         'code_path': str(strategy_file)
                     })
-        
-        # Try to load metrics from lessons.jsonl
-        lessons_file = run_dir / "lessons.jsonl"
-        if lessons_file.exists():
-            try:
-                for line in lessons_file.read_text().strip().split('\n'):
-                    if line:
-                        lesson = json.loads(line)
-                        # Extract any metrics mentioned in lessons
-                        # This is a backup for strategies without leaderboard entry
-            except:
-                pass
     
     # Sort: KEPT first, then by Sharpe ratio
     strategies.sort(key=lambda x: (x.get('status') != 'KEPT', -x.get('sharpe', 0)))
@@ -217,6 +218,18 @@ async def execute_run(run_id: str, config: RunConfig):
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, run_sync)
     
+    # Save logs to file for persistence
+    logs_path = ARTIFACTS_DIR / run_id / "logs.json"
+    logs_path.parent.mkdir(parents=True, exist_ok=True)
+    logs_path.write_text(json.dumps({
+        "run_id": run_id,
+        "config": run.get("config"),
+        "started_at": run.get("started_at"),
+        "completed_at": datetime.now().isoformat(),
+        "status": run.get("status"),
+        "logs": run.get("logs", [])
+    }, indent=2))
+    
     # Update global leaderboard after completion
     global leaderboard
     leaderboard = load_all_strategies()
@@ -271,6 +284,55 @@ async def stream_run(run_id: str):
 async def get_leaderboard():
     """Get top strategies."""
     return {"strategies": leaderboard}
+
+
+@app.get("/runs")
+async def list_runs():
+    """List all runs with their logs."""
+    runs_list = []
+    if ARTIFACTS_DIR.exists():
+        for run_dir in sorted(ARTIFACTS_DIR.iterdir(), reverse=True):
+            if not run_dir.is_dir() or run_dir.name.startswith('.'):
+                continue
+            
+            run_info = {"run_id": run_dir.name}
+            
+            # Load logs if available
+            logs_file = run_dir / "logs.json"
+            if logs_file.exists():
+                try:
+                    data = json.loads(logs_file.read_text())
+                    run_info.update(data)
+                except:
+                    pass
+            
+            # Count strategies
+            all_strats_file = run_dir / "all_strategies.json"
+            if all_strats_file.exists():
+                try:
+                    strats = json.loads(all_strats_file.read_text())
+                    run_info["strategy_count"] = len(strats)
+                    run_info["kept_count"] = len([s for s in strats if s.get("decision") == "KEPT"])
+                except:
+                    pass
+            
+            runs_list.append(run_info)
+    
+    return {"runs": runs_list}
+
+
+@app.get("/runs/{run_id}/logs")
+async def get_run_logs(run_id: str):
+    """Get logs for a specific run."""
+    logs_file = ARTIFACTS_DIR / run_id / "logs.json"
+    if logs_file.exists():
+        return json.loads(logs_file.read_text())
+    
+    # Check if run is in memory
+    if run_id in runs:
+        return runs[run_id]
+    
+    return {"error": "Run not found"}
 
 
 @app.get("/strategy/{run_id}/{name}")
