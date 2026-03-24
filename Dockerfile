@@ -12,8 +12,9 @@ COPY . .
 # Create artifacts directory
 RUN mkdir -p artifacts
 
-# Expose port
+# Railway injects PORT env var
+ENV PORT=8000
 EXPOSE 8000
 
-# Run the API
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the API - use shell form to expand $PORT
+CMD uvicorn api.main:app --host 0.0.0.0 --port $PORT
