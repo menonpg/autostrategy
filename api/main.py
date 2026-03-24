@@ -46,28 +46,63 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
 def load_all_strategies() -> list:
-    """Load all strategies from artifacts directories."""
+    """Load ALL strategies from artifacts directories (not just winners)."""
     strategies = []
     if not ARTIFACTS_DIR.exists():
         return strategies
     
     for run_dir in ARTIFACTS_DIR.iterdir():
-        if not run_dir.is_dir():
+        if not run_dir.is_dir() or run_dir.name.startswith('.'):
             continue
+        
+        # Load from leaderboard.json (winners)
         leaderboard_file = run_dir / "leaderboard.json"
+        winners = set()
         if leaderboard_file.exists():
             try:
                 data = json.loads(leaderboard_file.read_text())
                 for s in data:
                     s['run_id'] = run_dir.name
+                    s['status'] = 'KEPT'
                     s['code_path'] = str(run_dir / "strategies" / f"{s['name']}.py")
-                strategies.extend(data)
+                    winners.add(s['name'])
+                    strategies.append(s)
+            except:
+                pass
+        
+        # Also load ALL strategy files (including discarded ones)
+        strategies_dir = run_dir / "strategies"
+        if strategies_dir.exists():
+            for strategy_file in strategies_dir.glob("*.py"):
+                name = strategy_file.stem
+                if name not in winners:
+                    # Parse the file to extract any metrics from comments/docstring
+                    strategies.append({
+                        'name': name,
+                        'run_id': run_dir.name,
+                        'status': 'DISCARDED',
+                        'sharpe': 0,
+                        'total_return': 0,
+                        'max_drawdown': 0,
+                        'trades': 0,
+                        'code_path': str(strategy_file)
+                    })
+        
+        # Try to load metrics from lessons.jsonl
+        lessons_file = run_dir / "lessons.jsonl"
+        if lessons_file.exists():
+            try:
+                for line in lessons_file.read_text().strip().split('\n'):
+                    if line:
+                        lesson = json.loads(line)
+                        # Extract any metrics mentioned in lessons
+                        # This is a backup for strategies without leaderboard entry
             except:
                 pass
     
-    # Sort by Sharpe ratio
-    strategies.sort(key=lambda x: x.get('sharpe', 0), reverse=True)
-    return strategies[:20]  # Top 20
+    # Sort: KEPT first, then by Sharpe ratio
+    strategies.sort(key=lambda x: (x.get('status') != 'KEPT', -x.get('sharpe', 0)))
+    return strategies[:50]  # Top 50
 
 
 @app.get("/", response_class=HTMLResponse)
