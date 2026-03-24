@@ -1,0 +1,42 @@
+# AutoStrategy Configuration
+# See README.md for full options
+
+hypothesis:
+  # Starting hypothesis (or use --hypothesis CLI flag)
+  initial: "Momentum strategies work when volume is above 1.5x average"
+  
+  # Alternative: explore mode generates hypotheses
+  # seed_ideas: ["momentum", "mean_reversion", "breakout", "pairs"]
+
+backtest:
+  start_date: "2024-01-01"
+  end_date: "2026-03-01"
+  universe:
+    - SPY
+    - QQQ
+    - AAPL
+    - NVDA
+    - MSFT
+    - GOOGL
+    - AMZN
+    - META
+    - TSLA
+    - AMD
+  initial_capital: 100000
+
+constraints:
+  max_drawdown: 0.25      # Discard if drawdown > 25%
+  min_trades: 30          # Need statistical significance
+
+evolution:
+  max_iterations: 50      # Max attempts
+  time_budget_hours: 8    # Stop after 8 hours
+  keep_threshold: 1.5     # Keep if Sharpe > 1.5
+
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+  # For local models:
+  # provider: openai
+  # base_url: http://localhost:11434/v1
+  # model: llama3.2
