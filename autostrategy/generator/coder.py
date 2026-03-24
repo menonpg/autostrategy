@@ -89,9 +89,14 @@ HYPOTHESIS: {hypothesis}
 
 Generate a complete Python trading strategy with:
 1. Signal computation (momentum, mean reversion, etc.)
-2. Entry conditions
+2. Entry conditions  
 3. Exit conditions (including stop-loss and take-profit)
-4. Position sizing
+
+IMPORTANT DATA FORMAT:
+- prices: DataFrame where COLUMNS are ticker symbols (e.g., 'SPY', 'QQQ', 'AAPL') and values are CLOSE prices
+- volumes: DataFrame with same structure, values are Volume
+- Example: prices['SPY'] returns a Series of SPY close prices
+- DO NOT use prices['close'] or prices['open'] - those columns don't exist!
 
 Output ONLY the Python code, no explanations. Use this exact structure:
 
@@ -104,17 +109,43 @@ import pandas as pd
 import numpy as np
 
 def compute_signals(prices: pd.DataFrame, volumes: pd.DataFrame) -> pd.Series:
-    \"\"\"Return Series of signals: 1 (long), 0 (flat), -1 (short)\"\"\"
-    # Your signal logic here
-    pass
+    \"\"\"
+    Compute trading signals for each ticker.
+    
+    Args:
+        prices: DataFrame with ticker columns (SPY, QQQ, etc.), values are close prices
+        volumes: DataFrame with ticker columns, values are volume
+        
+    Returns:
+        Series indexed by ticker symbols with signal values: 1 (long), 0 (flat), -1 (short)
+    \"\"\"
+    signals = pd.Series(0, index=prices.columns)
+    
+    for ticker in prices.columns:
+        close = prices[ticker]
+        volume = volumes[ticker]
+        # Your logic here - compute signal for this ticker
+        # signals[ticker] = 1, 0, or -1
+    
+    return signals
 
 def entry_condition(prices: pd.DataFrame, idx: int) -> bool:
-    # Your entry logic
-    pass
+    \"\"\"Check if entry conditions are met. prices has single ticker column.\"\"\"
+    ticker = prices.columns[0]
+    close = prices[ticker]
+    # Your entry logic using close.iloc[idx], close.iloc[idx-1], etc.
+    return True  # or False
 
 def exit_condition(prices: pd.DataFrame, idx: int, entry_price: float, current_price: float) -> bool:
-    # Your exit logic (include stop-loss and take-profit)
-    pass
+    \"\"\"Check if exit conditions are met. Includes stop-loss and take-profit.\"\"\"
+    # Stop loss at 5%
+    if current_price < entry_price * 0.95:
+        return True
+    # Take profit at 10%
+    if current_price > entry_price * 1.10:
+        return True
+    # Your additional exit logic
+    return False
 ```
 """
 
