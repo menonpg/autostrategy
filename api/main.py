@@ -105,76 +105,86 @@ async def start_run(config: RunConfig, background_tasks: BackgroundTasks):
 
 
 async def execute_run(run_id: str, config: RunConfig):
-    """Execute the AutoStrategy loop."""
+    """Execute the AutoStrategy loop in a thread pool to avoid blocking."""
     import sys
+    import concurrent.futures
     sys.path.insert(0, str(BASE_DIR))
-    
-    from autostrategy.loop import AutoStrategyLoop
     
     run = runs[run_id]
     
-    def log_callback(message: str):
-        run["logs"].append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "message": message
-        })
-    
-    try:
-        # Build config
-        loop_config = {
-            "hypothesis": {"initial": config.hypothesis},
-            "backtest": {
-                "start_date": "2024-01-01",
-                "end_date": "2026-03-01",
-                "universe": ["SPY", "QQQ", "AAPL", "NVDA", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "AMD"],
-                "initial_capital": 100000
-            },
-            "constraints": {"max_drawdown": 0.25, "min_trades": 30},
-            "evolution": {
-                "max_iterations": config.iterations,
-                "time_budget_hours": config.hours,
-                "keep_threshold": config.keep_threshold
-            },
-            "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
-        }
+    def run_sync():
+        """Synchronous wrapper to run in thread pool."""
+        from autostrategy.loop import AutoStrategyLoop
         
-        # Create artifacts dir for this run
-        artifacts_dir = ARTIFACTS_DIR / run_id
-        
-        loop = AutoStrategyLoop(loop_config, artifacts_dir=artifacts_dir)
-        
-        # Monkey-patch print to capture output
-        original_print = print
-        def captured_print(*args, **kwargs):
-            message = " ".join(str(a) for a in args)
-            log_callback(message)
-            original_print(*args, **kwargs)
-        
-        import builtins
-        builtins.print = captured_print
+        def log_callback(message: str):
+            run["logs"].append({
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "message": message
+            })
         
         try:
-            result = loop.run(
-                initial_hypothesis=config.hypothesis,
-                max_iterations=config.iterations,
-                time_budget_hours=config.hours,
-                keep_threshold=config.keep_threshold
-            )
+            # Build config
+            loop_config = {
+                "hypothesis": {"initial": config.hypothesis},
+                "backtest": {
+                    "start_date": "2024-01-01",
+                    "end_date": "2026-03-01",
+                    "universe": ["SPY", "QQQ", "AAPL", "NVDA", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "AMD"],
+                    "initial_capital": 100000
+                },
+                "constraints": {"max_drawdown": 0.25, "min_trades": 30},
+                "evolution": {
+                    "max_iterations": config.iterations,
+                    "time_budget_hours": config.hours,
+                    "keep_threshold": config.keep_threshold
+                },
+                "llm": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"}
+            }
             
-            run["strategies"] = result
-            run["status"] = "completed"
+            # Create artifacts dir for this run
+            artifacts_dir = ARTIFACTS_DIR / run_id
             
-            # Update global leaderboard
-            global leaderboard
-            leaderboard = load_all_strategies()
+            strategy_loop = AutoStrategyLoop(loop_config, artifacts_dir=artifacts_dir)
             
-        finally:
-            builtins.print = original_print
+            # Monkey-patch print to capture output
+            original_print = print
+            def captured_print(*args, **kwargs):
+                message = " ".join(str(a) for a in args)
+                log_callback(message)
+                original_print(*args, **kwargs)
             
-    except Exception as e:
-        run["status"] = "failed"
-        run["error"] = str(e)
-        log_callback(f"ERROR: {e}")
+            import builtins
+            builtins.print = captured_print
+            
+            try:
+                result = strategy_loop.run(
+                    initial_hypothesis=config.hypothesis,
+                    max_iterations=config.iterations,
+                    time_budget_hours=config.hours,
+                    keep_threshold=config.keep_threshold
+                )
+                
+                run["strategies"] = result
+                run["status"] = "completed"
+                
+            finally:
+                builtins.print = original_print
+                
+        except Exception as e:
+            run["status"] = "failed"
+            run["error"] = str(e)
+            run["logs"].append({
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "message": f"ERROR: {e}"
+            })
+    
+    # Run the sync function in a thread pool
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, run_sync)
+    
+    # Update global leaderboard after completion
+    global leaderboard
+    leaderboard = load_all_strategies()
 
 
 @app.get("/run/{run_id}")
