@@ -29,20 +29,32 @@ class BacktestEngine:
             return
             
         print(f"    Loading data for {len(self.universe)} tickers...")
-        prices = {}
-        volumes = {}
         
-        for ticker in self.universe:
-            try:
-                df = yf.download(ticker, start=self.start_date, end=self.end_date, progress=False)
-                if len(df) > 0:
-                    prices[ticker] = df['Adj Close']
-                    volumes[ticker] = df['Volume']
-            except Exception as e:
-                print(f"    Warning: Could not load {ticker}: {e}")
+        # Download all tickers at once (more efficient)
+        try:
+            df = yf.download(self.universe, start=self.start_date, end=self.end_date, progress=False)
+            
+            if len(df) == 0:
+                print("    Warning: No data returned")
+                self._prices = pd.DataFrame()
+                self._volumes = pd.DataFrame()
+                return
+            
+            # Handle MultiIndex columns (yfinance >= 0.2.40)
+            if isinstance(df.columns, pd.MultiIndex):
+                self._prices = df['Close']
+                self._volumes = df['Volume']
+            else:
+                # Single ticker returns flat columns
+                self._prices = df[['Close']].rename(columns={'Close': self.universe[0]})
+                self._volumes = df[['Volume']].rename(columns={'Volume': self.universe[0]})
                 
-        self._prices = pd.DataFrame(prices)
-        self._volumes = pd.DataFrame(volumes)
+        except Exception as e:
+            print(f"    Warning: Could not load data: {e}")
+            self._prices = pd.DataFrame()
+            self._volumes = pd.DataFrame()
+            return
+                
         print(f"    Loaded {len(self._prices)} days of data")
         
     def run(self, strategy_code: str) -> Dict[str, Any]:
