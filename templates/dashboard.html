@@ -128,9 +128,14 @@
                 <!-- Right Column: Leaderboard -->
                 <div class="space-y-6">
                     <div class="card rounded-xl p-6">
-                        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
-                            <span class="text-2xl">📊</span> All Strategies
-                        </h2>
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <span class="text-2xl">📊</span> All Strategies
+                            </h2>
+                            <button onclick="clearAllRuns()" class="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded border border-red-400/30 hover:border-red-400">
+                                🗑️ Clear All
+                            </button>
+                        </div>
                         <div id="leaderboard" class="space-y-3">
                             {% if leaderboard %}
                                 {% for strategy in leaderboard %}
@@ -140,16 +145,20 @@
                                      hx-trigger="click"
                                      onclick="document.getElementById('strategy-modal').classList.remove('hidden')">
                                     <div class="flex items-center justify-between mb-1">
-                                        <span class="font-medium text-sm truncate">{{ strategy.name }}</span>
-                                        {% if strategy.status == 'KEPT' %}
-                                        <span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
-                                            ✓ KEPT
-                                        </span>
-                                        {% else %}
-                                        <span class="text-xs px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded">
-                                            DISCARDED
-                                        </span>
-                                        {% endif %}
+                                        <span class="font-medium text-sm truncate flex-1">{{ strategy.name }}</span>
+                                        <div class="flex items-center gap-2">
+                                            {% if strategy.status == 'KEPT' %}
+                                            <span class="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
+                                                ✓ KEPT
+                                            </span>
+                                            {% else %}
+                                            <span class="text-xs px-2 py-0.5 bg-gray-500/20 text-gray-400 rounded">
+                                                DISCARDED
+                                            </span>
+                                            {% endif %}
+                                            <button onclick="event.stopPropagation(); deleteStrategy('{{ strategy.run_id }}', '{{ strategy.name }}')" 
+                                                class="text-red-400/50 hover:text-red-400 text-xs">✕</button>
+                                        </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-2 text-xs">
                                         <div>
@@ -324,6 +333,49 @@
                 document.getElementById('strategy-modal').classList.add('hidden');
             }
         });
+        
+        // Clear all runs
+        async function clearAllRuns() {
+            if (!confirm('Delete ALL runs and strategies? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch('/runs', { method: 'DELETE' });
+                const data = await res.json();
+                
+                if (data.status === 'cleared') {
+                    alert(`Cleared ${data.deleted_runs.length} runs`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to clear runs');
+            }
+        }
+        
+        // Delete single strategy
+        async function deleteStrategy(runId, name) {
+            if (!confirm(`Delete strategy "${name}"?`)) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/strategy/${runId}/${name}`, { method: 'DELETE' });
+                const data = await res.json();
+                
+                if (data.status === 'deleted') {
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Failed to delete strategy');
+            }
+        }
     </script>
 </body>
 </html>

@@ -335,6 +335,88 @@ async def get_run_logs(run_id: str):
     return {"error": "Run not found"}
 
 
+@app.delete("/runs/{run_id}")
+async def delete_run(run_id: str):
+    """Delete a specific run and all its artifacts."""
+    import shutil
+    
+    run_dir = ARTIFACTS_DIR / run_id
+    if not run_dir.exists():
+        return {"error": "Run not found"}
+    
+    try:
+        shutil.rmtree(run_dir)
+        
+        # Update leaderboard
+        global leaderboard
+        leaderboard = load_all_strategies()
+        
+        # Remove from in-memory runs if present
+        if run_id in runs:
+            del runs[run_id]
+        
+        return {"status": "deleted", "run_id": run_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/runs")
+async def delete_all_runs():
+    """Delete ALL runs and clear history."""
+    import shutil
+    
+    deleted = []
+    if ARTIFACTS_DIR.exists():
+        for run_dir in ARTIFACTS_DIR.iterdir():
+            if run_dir.is_dir() and not run_dir.name.startswith('.'):
+                try:
+                    shutil.rmtree(run_dir)
+                    deleted.append(run_dir.name)
+                except:
+                    pass
+    
+    # Clear in-memory state
+    global leaderboard
+    leaderboard = []
+    runs.clear()
+    
+    return {"status": "cleared", "deleted_runs": deleted}
+
+
+@app.delete("/strategy/{run_id}/{name}")
+async def delete_strategy(run_id: str, name: str):
+    """Delete a specific strategy from a run."""
+    strategy_path = ARTIFACTS_DIR / run_id / "strategies" / f"{name}.py"
+    
+    if not strategy_path.exists():
+        return {"error": "Strategy not found"}
+    
+    try:
+        strategy_path.unlink()
+        
+        # Update all_strategies.json
+        all_strats_file = ARTIFACTS_DIR / run_id / "all_strategies.json"
+        if all_strats_file.exists():
+            strats = json.loads(all_strats_file.read_text())
+            strats = [s for s in strats if s.get("name") != name]
+            all_strats_file.write_text(json.dumps(strats, indent=2))
+        
+        # Update leaderboard.json
+        leaderboard_file = ARTIFACTS_DIR / run_id / "leaderboard.json"
+        if leaderboard_file.exists():
+            lb = json.loads(leaderboard_file.read_text())
+            lb = [s for s in lb if s.get("name") != name]
+            leaderboard_file.write_text(json.dumps(lb, indent=2))
+        
+        # Refresh global leaderboard
+        global leaderboard
+        leaderboard = load_all_strategies()
+        
+        return {"status": "deleted", "strategy": name}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.get("/strategy/{run_id}/{name}")
 async def get_strategy(run_id: str, name: str):
     """Get strategy code and details."""
