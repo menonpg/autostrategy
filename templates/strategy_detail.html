@@ -1,0 +1,80 @@
+<div class="space-y-6">
+    <!-- Metrics -->
+    <div class="grid grid-cols-4 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-gray-400 text-sm mb-1">Sharpe Ratio</div>
+            <div class="text-2xl font-bold text-green-400">{{ "%.2f"|format(metrics.sharpe|default(0)) }}</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-gray-400 text-sm mb-1">Total Return</div>
+            <div class="text-2xl font-bold text-blue-400">{{ "%.1f"|format((metrics.total_return|default(0)) * 100) }}%</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-gray-400 text-sm mb-1">Max Drawdown</div>
+            <div class="text-2xl font-bold text-red-400">{{ "%.1f"|format((metrics.max_drawdown|default(0)) * 100) }}%</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 text-center">
+            <div class="text-gray-400 text-sm mb-1">Trades</div>
+            <div class="text-2xl font-bold text-purple-400">{{ metrics.trades|default(0) }}</div>
+        </div>
+    </div>
+
+    <!-- Strategy Name -->
+    <div>
+        <h4 class="text-lg font-semibold mb-2">{{ name }}</h4>
+        <p class="text-sm text-gray-500">Run: {{ run_id }}</p>
+    </div>
+
+    <!-- Code -->
+    <div>
+        <div class="flex items-center justify-between mb-2">
+            <h4 class="text-sm font-semibold text-gray-400">Strategy Code</h4>
+            <button onclick="copyCode()" class="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Copy
+            </button>
+        </div>
+        <pre class="bg-gray-950 rounded-lg p-4 overflow-x-auto text-sm"><code id="strategy-code" class="language-python">{{ code }}</code></pre>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex gap-3">
+        <button onclick="downloadStrategy('{{ name }}', `{{ code|e }}`)" 
+            class="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Download .py
+        </button>
+        <button class="flex-1 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition flex items-center justify-center gap-2 opacity-50 cursor-not-allowed" disabled>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            Deploy (Coming Soon)
+        </button>
+    </div>
+</div>
+
+<script>
+    // Highlight code
+    if (typeof hljs !== 'undefined') {
+        hljs.highlightElement(document.getElementById('strategy-code'));
+    }
+    
+    function copyCode() {
+        const code = document.getElementById('strategy-code').textContent;
+        navigator.clipboard.writeText(code);
+    }
+    
+    function downloadStrategy(name, code) {
+        const blob = new Blob([code], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name}.py`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+</script>
