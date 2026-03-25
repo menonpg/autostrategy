@@ -48,16 +48,13 @@
             </svg>
             Download .py
         </button>
-        <button id="deploy-btn" onclick="deployStrategy('{{ run_id }}', '{{ name }}')"
+        <button id="deploy-btn" onclick="toggleDeploy('{{ run_id }}', '{{ name }}')"
             class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition flex items-center justify-center gap-2">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-            </svg>
-            Deploy to Alerts
+            🔔 Deploy to Alerts
         </button>
     </div>
     
-    <p class="text-xs text-gray-500 mt-2">
+    <p id="deploy-status-msg" class="text-xs text-gray-500 mt-2">
         Deploy sends you Telegram alerts when this strategy generates BUY/SELL signals.
     </p>
 </div>
@@ -83,38 +80,54 @@
         URL.revokeObjectURL(url);
     }
     
-    async function deployStrategy(runId, name) {
-        const btn = document.getElementById('deploy-btn');
-        const originalText = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="animate-spin">⏳</span> Deploying...';
-        
+    let _isDeployed = false;
+    
+    // Check deployed state on load
+    async function checkDeployedState(runId, name) {
         try {
-            const res = await fetch(`/strategy/${runId}/${name}/deploy`, {
-                method: 'POST'
-            });
+            const res = await fetch('/deployed');
             const data = await res.json();
-            
-            if (data.status === 'deployed' || data.status === 'already_deployed') {
-                btn.innerHTML = '✅ Deployed!';
-                btn.className = btn.className.replace('bg-green-600 hover:bg-green-700', 'bg-gray-600');
-                setTimeout(() => {
-                    btn.innerHTML = '🔔 Alerts Active';
-                }, 1500);
-            } else {
-                btn.innerHTML = '❌ Failed';
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }, 2000);
-            }
-        } catch (err) {
-            console.error(err);
-            btn.innerHTML = '❌ Error';
-            setTimeout(() => {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }, 2000);
+            _isDeployed = (data.strategies || []).some(s => s.run_id === runId && s.name === name);
+            updateDeployBtn();
+        } catch (e) {}
+    }
+    
+    function updateDeployBtn() {
+        const btn = document.getElementById('deploy-btn');
+        const msg = document.getElementById('deploy-status-msg');
+        if (_isDeployed) {
+            btn.innerHTML = '✅ Alerts Active — Click to Remove';
+            btn.className = btn.className.replace('bg-green-600 hover:bg-green-700', 'bg-gray-600 hover:bg-gray-700');
+            msg.innerHTML = '<span class="text-green-400">🟢 This strategy is deployed. You will receive Telegram alerts for BUY/SELL signals.</span>';
+        } else {
+            btn.innerHTML = '🔔 Deploy to Alerts';
+            btn.className = btn.className.replace('bg-gray-600 hover:bg-gray-700', 'bg-green-600 hover:bg-green-700');
+            msg.textContent = 'Deploy sends you Telegram alerts when this strategy generates BUY/SELL signals.';
         }
     }
+    
+    async function toggleDeploy(runId, name) {
+        const btn = document.getElementById('deploy-btn');
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Working...';
+        
+        try {
+            if (_isDeployed) {
+                await fetch(`/strategy/${runId}/${name}/deploy`, { method: 'DELETE' });
+                _isDeployed = false;
+            } else {
+                await fetch(`/strategy/${runId}/${name}/deploy`, { method: 'POST' });
+                _isDeployed = true;
+            }
+            updateDeployBtn();
+        } catch (err) {
+            btn.innerHTML = '❌ Error';
+            setTimeout(() => { updateDeployBtn(); }, 2000);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+    
+    // Run on load
+    checkDeployedState('{{ run_id }}', '{{ name }}');
 </script>

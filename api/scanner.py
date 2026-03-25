@@ -12,8 +12,9 @@ import httpx
 import pandas as pd
 import yfinance as yf
 
-# Deployed strategies file
-DEPLOYED_FILE = Path(__file__).parent.parent / "artifacts" / "deployed.json"
+# Deployed strategies file - use /data if available (Railway persistent volume), else artifacts/
+_DATA_DIR = Path("/data") if Path("/data").exists() else Path(__file__).parent.parent / "artifacts"
+DEPLOYED_FILE = _DATA_DIR / "deployed.json"
 ARTIFACTS_DIR = Path(__file__).parent.parent / "artifacts"
 
 # Telegram config (set via env vars)

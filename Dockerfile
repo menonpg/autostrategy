@@ -9,8 +9,8 @@ RUN pip install --no-cache-dir .
 # Copy application
 COPY . .
 
-# Create artifacts directory
-RUN mkdir -p artifacts
+# Create artifacts and persistent data directories
+RUN mkdir -p artifacts /data
 
 # Railway injects PORT env var
 ENV PORT=8000

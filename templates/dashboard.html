@@ -186,6 +186,25 @@
                         </div>
                     </div>
 
+                    <!-- Deployed Strategies / Alerts -->
+                    <div class="card rounded-xl p-6">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold flex items-center gap-2">
+                                <span class="text-2xl">🔔</span> Active Alerts
+                            </h2>
+                            <button onclick="testScan()" id="scan-btn"
+                                class="text-xs text-green-400 hover:text-green-300 px-2 py-1 rounded border border-green-400/30 hover:border-green-400">
+                                ▶ Test Scan
+                            </button>
+                        </div>
+                        <div id="deployed-list" class="space-y-2 mb-3">
+                            <div class="text-center py-4 text-gray-500 text-sm" id="deployed-loading">
+                                Loading...
+                            </div>
+                        </div>
+                        <div id="scan-results" class="hidden mt-3 bg-gray-950 rounded-lg p-3 text-xs font-mono max-h-40 overflow-y-auto"></div>
+                    </div>
+
                     <!-- How it Works -->
                     <div class="card rounded-xl p-6">
                         <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -356,6 +375,77 @@
             }
         }
         
+        // Load deployed strategies on page load
+        async function loadDeployed() {
+            try {
+                const res = await fetch('/deployed');
+                const data = await res.json();
+                const list = document.getElementById('deployed-list');
+                
+                if (!data.strategies || data.strategies.length === 0) {
+                    list.innerHTML = '<div class="text-center py-4 text-gray-500 text-sm">No strategies deployed yet.<br><span class="text-xs">Open a strategy and click "Deploy to Alerts"</span></div>';
+                    return;
+                }
+                
+                list.innerHTML = data.strategies.map(s => `
+                    <div class="flex items-center justify-between bg-gray-800/50 rounded-lg px-3 py-2">
+                        <div>
+                            <div class="text-sm font-medium text-green-400">🟢 ${s.name}</div>
+                            <div class="text-xs text-gray-500">${s.run_id} · ${s.deployed_at ? new Date(s.deployed_at).toLocaleDateString() : ''}</div>
+                        </div>
+                        <button onclick="undeployStrategy('${s.run_id}', '${s.name}')" 
+                            class="text-xs text-red-400/60 hover:text-red-400 ml-2">✕</button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                document.getElementById('deployed-list').innerHTML = '<div class="text-xs text-red-400">Failed to load</div>';
+            }
+        }
+        
+        async function undeployStrategy(runId, name) {
+            if (!confirm(`Remove "${name}" from alerts?`)) return;
+            try {
+                await fetch(`/strategy/${runId}/${name}/deploy`, { method: 'DELETE' });
+                loadDeployed();
+            } catch (err) {
+                alert('Failed to undeploy');
+            }
+        }
+        
+        async function testScan() {
+            const btn = document.getElementById('scan-btn');
+            const resultsEl = document.getElementById('scan-results');
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning...';
+            resultsEl.classList.remove('hidden');
+            resultsEl.innerHTML = 'Fetching market data and running strategies...';
+            
+            try {
+                const res = await fetch('/scan', { method: 'POST' });
+                const data = await res.json();
+                
+                if (!data.results || data.results.length === 0) {
+                    resultsEl.innerHTML = '<span class="text-gray-500">No deployed strategies to scan.</span>';
+                } else {
+                    resultsEl.innerHTML = data.results.map(r => {
+                        if (r.error) return `<div class="text-red-400">❌ ${r.name}: ${r.error}</div>`;
+                        const buys = r.buy.length ? `<span class="text-green-400">BUY: ${r.buy.join(', ')}</span>` : '';
+                        const sells = r.sell.length ? `<span class="text-red-400">SELL: ${r.sell.join(', ')}</span>` : '';
+                        const none = (!r.buy.length && !r.sell.length) ? '<span class="text-gray-500">No signals</span>' : '';
+                        return `<div class="mb-1"><span class="text-purple-400">${r.name}:</span> ${buys}${sells ? ' ' + sells : ''}${none}</div>`;
+                    }).join('');
+                }
+            } catch (err) {
+                resultsEl.innerHTML = '<span class="text-red-400">Scan failed</span>';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '▶ Test Scan';
+            }
+        }
+        
+        // Load deployed on page load
+        loadDeployed();
+
         // Delete single strategy
         async function deleteStrategy(runId, name) {
             if (!confirm(`Delete strategy "${name}"?`)) {
