@@ -1,8 +1,8 @@
 """AI strategy code generator."""
 
-import anthropic
 import re
 from typing import Optional, List, Tuple
+from autostrategy.llm import get_client
 
 
 STRATEGY_TEMPLATE = '''
@@ -56,8 +56,8 @@ class StrategyCoder:
     """Generate trading strategy code from hypotheses."""
     
     def __init__(self, llm_config: dict):
-        self.client = anthropic.Anthropic()
-        self.model = llm_config.get("model", "claude-sonnet-4-20250514")
+        self.client = get_client()
+        self.model = llm_config.get("model", "gpt-5-chat")
         
     def generate(
         self,
